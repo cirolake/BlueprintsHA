@@ -1,0 +1,135 @@
+blueprint:
+  name: MOES Knob Controls CCT Light (Zigbee2MQTT)
+  description: >
+    Controls a white-tunable (CCT) light with a MOES Zigbee smart knob
+    (ERS-10TZBVK-AA) paired in Zigbee2MQTT.
+
+    - Click: turn the light on or off.
+    - Rotate: brightness up (right) or down (left).
+    - Press and rotate: warmer or cooler white.
+
+    The knob must be in COMMAND mode (triple-click the knob to switch modes;
+    the current mode is shown in Zigbee2MQTT as "operation_mode").
+  domain: automation
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    knob_name:
+      name: Knob name in Zigbee2MQTT
+      description: >
+        The knob's "friendly name" exactly as shown in the Zigbee2MQTT panel
+        (Devices list), for example "Knob Sala".
+      selector:
+        text:
+    base_topic:
+      name: Zigbee2MQTT base topic
+      description: Leave as zigbee2mqtt unless you changed it in Zigbee2MQTT's configuration.
+      default: zigbee2mqtt
+      selector:
+        text:
+    light_entity:
+      name: CCT light
+      selector:
+        entity:
+          domain: light
+    brightness_step:
+      name: Brightness change per knob step (%)
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+          unit_of_measurement: "%"
+    min_brightness:
+      name: Lowest brightness when turning left (%)
+      description: Turning left stops here instead of switching the light off.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 50
+          unit_of_measurement: "%"
+    color_temp_step:
+      name: Color temperature change per knob step (Kelvin)
+      default: 250
+      selector:
+        number:
+          min: 50
+          max: 1000
+          step: 50
+          unit_of_measurement: K
+    right_is_warmer:
+      name: Press and turn right makes the light warmer
+      description: Turn this off if you prefer press and turn right to make the light cooler.
+      default: true
+      selector:
+        boolean:
+
+mode: queued
+max: 5
+max_exceeded: silent
+
+trigger_variables:
+  base_topic: !input base_topic
+  knob_name: !input knob_name
+
+triggers:
+  - trigger: mqtt
+    topic: "{{ base_topic }}/{{ knob_name }}/action"
+
+variables:
+  light_entity: !input light_entity
+  brightness_step: !input brightness_step
+  min_brightness: !input min_brightness
+  color_temp_step: !input color_temp_step
+  right_is_warmer: !input right_is_warmer
+  knob_action: "{{ trigger.payload }}"
+
+actions:
+  - choose:
+      # Click: on/off
+      - conditions: "{{ knob_action == 'toggle' }}"
+        sequence:
+          - action: light.toggle
+            target:
+              entity_id: "{{ light_entity }}"
+
+      # Rotate right: brighter (turns the light on if it was off)
+      - conditions: "{{ knob_action == 'brightness_step_up' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              brightness_step_pct: "{{ brightness_step }}"
+
+      # Rotate left: dimmer, never below the minimum, never switches off
+      - conditions: "{{ knob_action == 'brightness_step_down' and is_state(light_entity, 'on') }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              brightness_pct: >
+                {% set current = (state_attr(light_entity, 'brightness') | int(255)) / 255 * 100 %}
+                {{ [ (current - brightness_step) | round(0) | int, min_brightness | int ] | max }}
+
+      # Press and rotate: warmer or cooler (only while the light is on)
+      - conditions: >
+          {{ knob_action in ['color_temperature_step_up', 'color_temperature_step_down']
+             and is_state(light_entity, 'on') }}
+        sequence:
+          - variables:
+              turned_right: "{{ knob_action == 'color_temperature_step_up' }}"
+              warmer: "{{ turned_right == right_is_warmer }}"
+              k_min: "{{ state_attr(light_entity, 'min_color_temp_kelvin') | int(2700) }}"
+              k_max: "{{ state_attr(light_entity, 'max_color_temp_kelvin') | int(6500) }}"
+              k_now: "{{ state_attr(light_entity, 'color_temp_kelvin') | int((k_min + k_max) // 2) }}"
+              k_new: >
+                {% set k = k_now - color_temp_step if warmer else k_now + color_temp_step %}
+                {{ [ [ k | int, k_min ] | max, k_max ] | min }}
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              color_temp_kelvin: "{{ k_new }}"
