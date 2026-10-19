@@ -1,0 +1,64 @@
+blueprint:
+  name: Any On Turns On
+  description: >
+    Turns on a target entity when one or more of the source entities are on.
+    Optionally turns the target off when all source entities are off.
+    The target must not be one of the source entities.
+  domain: automation
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    source_entities:
+      name: Source entities
+      description: Switches or lights to watch. If any of them is on, the target turns on.
+      selector:
+        entity:
+          domain:
+            - switch
+            - light
+            - input_boolean
+          multiple: true
+    target_entity:
+      name: Target entity
+      description: The switch or light to turn on.
+      selector:
+        entity:
+          domain:
+            - switch
+            - light
+            - input_boolean
+    turn_off_when_all_off:
+      name: Turn the target off when all sources are off
+      description: If off, the target is only ever turned on by this automation.
+      default: true
+      selector:
+        boolean:
+
+mode: queued
+max_exceeded: silent
+
+variables:
+  sources: !input source_entities
+  target: !input target_entity
+  turn_off_when_all_off: !input turn_off_when_all_off
+
+triggers:
+  - trigger: state
+    entity_id: !input source_entities
+    from: ["on", "off"]
+    to: ["on", "off"]
+
+actions:
+  - variables:
+      any_on: "{{ sources | select('is_state', 'on') | list | count > 0 }}"
+  - choose:
+      - conditions: "{{ any_on and not is_state(target, 'on') }}"
+        sequence:
+          - action: homeassistant.turn_on
+            target:
+              entity_id: "{{ target }}"
+      - conditions: "{{ turn_off_when_all_off and not any_on and is_state(target, 'on') }}"
+        sequence:
+          - action: homeassistant.turn_off
+            target:
+              entity_id: "{{ target }}"
