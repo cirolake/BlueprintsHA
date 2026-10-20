@@ -1,0 +1,58 @@
+alias: Moes Knob
+description: ""
+triggers:
+  - trigger: mqtt
+    topic: zigbee2mqtt/Botão Giro Sala/#
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == \"brightness_step_up\" }}"
+        sequence:
+          - action: light.turn_on
+            metadata: {}
+            data:
+              brightness_step: "{{ trigger.payload_json.action_step_size }}"
+            target:
+              entity_id: light.spots_sala_zigbee
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == \"brightness_step_down\" }}"
+        sequence:
+          - action: light.turn_on
+            metadata: {}
+            data:
+              brightness_step: "{{ trigger.payload_json.action_step_size |float * -1 }}"
+            target:
+              entity_id: light.spots_sala_zigbee
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == \"toggle\" }}"
+        sequence:
+          - action: light.toggle
+            metadata: {}
+            target:
+              entity_id: light.spots_sala_zigbee
+            data: {}
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == \"color_temperature_step_down\" }}"
+        sequence:
+          - action: light.turn_on
+            metadata: {}
+            data:
+              color_temp_kelvin: 2000
+            target:
+              entity_id: light.spots_sala_zigbee
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == \"color_temperature_step_up\" }}"
+        sequence:
+          - action: light.turn_on
+            metadata: {}
+            data:
+              color_temp_kelvin: 6500
+            target:
+              entity_id: light.spots_sala_zigbee
+mode: single
