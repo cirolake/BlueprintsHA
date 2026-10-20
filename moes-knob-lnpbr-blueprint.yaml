@@ -5,7 +5,7 @@ blueprint:
     smart knob (ERS-10TZBVK-AA and similar) paired in Zigbee2MQTT.
 
     - Click: toggle the light(s).
-    - Rotate right / left: brightness up / down by the knob's own step size.
+    - Rotate right / left: brightness up / down in steps (default 10%).
     - Press and rotate right: cool white (default 6500 K).
     - Press and rotate left: warm white (default 2000 K).
 
@@ -15,13 +15,14 @@ blueprint:
   homeassistant:
     min_version: "2024.10.0"
   input:
-    knob_name:
-      name: Knob name in Zigbee2MQTT
-      description: >
-        The knob's "friendly name" exactly as shown in the Zigbee2MQTT panel,
-        for example "Botão Giro Sala".
+    knob:
+      name: Knob
+      description: The Moes knob, as a device paired in Zigbee2MQTT.
       selector:
-        text:
+        device:
+          filter:
+            - integration: mqtt
+          multiple: false
     light_target:
       name: Light(s)
       description: The light or lights the knob controls.
@@ -33,6 +34,12 @@ blueprint:
       name: Advanced
       collapsed: true
       input:
+        brightness_step:
+          name: Brightness step
+          description: Brightness change per knob step.
+          default: 10
+          selector:
+            number: { min: 1, max: 50, step: 1, unit_of_measurement: "%" }
         warm_kelvin:
           name: Warm white
           description: Color temperature set when pressing and rotating left.
@@ -53,48 +60,52 @@ blueprint:
             text:
 
 trigger_variables:
-  knob_name: !input knob_name
   base_topic: !input base_topic
 
+triggers:
+  # Every Zigbee2MQTT device publishes its button actions on <base>/<name>/action.
+  # The condition below keeps only the selected knob.
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+/action' }}"
+
 variables:
+  knob: !input knob
+  step: !input brightness_step
   warm_kelvin: !input warm_kelvin
   cool_kelvin: !input cool_kelvin
-
-triggers:
-  - trigger: mqtt
-    topic: "{{ base_topic }}/{{ knob_name }}"
+  knob_topic: "{{ base_topic ~ '/' ~ device_attr(knob, 'name') ~ '/action' }}"
+  action: "{{ trigger.payload }}"
 
 conditions:
-  - condition: template
-    value_template: "{{ trigger.payload_json is defined and trigger.payload_json.action | default('') != '' }}"
+  - "{{ trigger.topic == knob_topic }}"
 
 actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ trigger.payload_json.action == 'brightness_step_up' }}"
+            value_template: "{{ action == 'brightness_step_up' }}"
         sequence:
           - action: light.turn_on
             data:
-              brightness_step: "{{ trigger.payload_json.action_step_size | int(0) }}"
+              brightness_step_pct: "{{ step | int }}"
             target: !input light_target
       - conditions:
           - condition: template
-            value_template: "{{ trigger.payload_json.action == 'brightness_step_down' }}"
+            value_template: "{{ action == 'brightness_step_down' }}"
         sequence:
           - action: light.turn_on
             data:
-              brightness_step: "{{ trigger.payload_json.action_step_size | int(0) * -1 }}"
+              brightness_step_pct: "{{ step | int * -1 }}"
             target: !input light_target
       - conditions:
           - condition: template
-            value_template: "{{ trigger.payload_json.action == 'toggle' }}"
+            value_template: "{{ action == 'toggle' }}"
         sequence:
           - action: light.toggle
             target: !input light_target
       - conditions:
           - condition: template
-            value_template: "{{ trigger.payload_json.action == 'color_temperature_step_down' }}"
+            value_template: "{{ action == 'color_temperature_step_down' }}"
         sequence:
           - action: light.turn_on
             data:
@@ -102,7 +113,7 @@ actions:
             target: !input light_target
       - conditions:
           - condition: template
-            value_template: "{{ trigger.payload_json.action == 'color_temperature_step_up' }}"
+            value_template: "{{ action == 'color_temperature_step_up' }}"
         sequence:
           - action: light.turn_on
             data:
