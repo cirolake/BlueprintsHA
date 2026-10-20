@@ -1,0 +1,112 @@
+blueprint:
+  name: Zigbee2MQTT - Moes Knob controls a light (simple)
+  description: >
+    Reusable version of the "Moes Knob" automation. Works with any Moes / Tuya
+    smart knob (ERS-10TZBVK-AA and similar) paired in Zigbee2MQTT.
+
+    - Click: toggle the light(s).
+    - Rotate right / left: brightness up / down by the knob's own step size.
+    - Press and rotate right: cool white (default 6500 K).
+    - Press and rotate left: warm white (default 2000 K).
+
+    The knob must be in **command** mode (press it 3 times quickly, or set
+    "Operation mode" to "command" in the Zigbee2MQTT device page).
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    knob_name:
+      name: Knob name in Zigbee2MQTT
+      description: >
+        The knob's "friendly name" exactly as shown in the Zigbee2MQTT panel,
+        for example "Botão Giro Sala".
+      selector:
+        text:
+    light_target:
+      name: Light(s)
+      description: The light or lights the knob controls.
+      selector:
+        target:
+          entity:
+            - domain: light
+    advanced:
+      name: Advanced
+      collapsed: true
+      input:
+        warm_kelvin:
+          name: Warm white
+          description: Color temperature set when pressing and rotating left.
+          default: 2000
+          selector:
+            number: { min: 1500, max: 6500, step: 100, unit_of_measurement: K }
+        cool_kelvin:
+          name: Cool white
+          description: Color temperature set when pressing and rotating right.
+          default: 6500
+          selector:
+            number: { min: 2000, max: 10000, step: 100, unit_of_measurement: K }
+        base_topic:
+          name: Zigbee2MQTT base topic
+          description: Leave as zigbee2mqtt unless you changed it in Zigbee2MQTT's configuration.
+          default: zigbee2mqtt
+          selector:
+            text:
+
+trigger_variables:
+  knob_name: !input knob_name
+  base_topic: !input base_topic
+
+variables:
+  warm_kelvin: !input warm_kelvin
+  cool_kelvin: !input cool_kelvin
+
+triggers:
+  - trigger: mqtt
+    topic: "{{ base_topic }}/{{ knob_name }}"
+
+conditions:
+  - condition: template
+    value_template: "{{ trigger.payload_json is defined and trigger.payload_json.action | default('') != '' }}"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == 'brightness_step_up' }}"
+        sequence:
+          - action: light.turn_on
+            data:
+              brightness_step: "{{ trigger.payload_json.action_step_size | int(0) }}"
+            target: !input light_target
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == 'brightness_step_down' }}"
+        sequence:
+          - action: light.turn_on
+            data:
+              brightness_step: "{{ trigger.payload_json.action_step_size | int(0) * -1 }}"
+            target: !input light_target
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == 'toggle' }}"
+        sequence:
+          - action: light.toggle
+            target: !input light_target
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == 'color_temperature_step_down' }}"
+        sequence:
+          - action: light.turn_on
+            data:
+              color_temp_kelvin: "{{ warm_kelvin | int }}"
+            target: !input light_target
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.payload_json.action == 'color_temperature_step_up' }}"
+        sequence:
+          - action: light.turn_on
+            data:
+              color_temp_kelvin: "{{ cool_kelvin | int }}"
+            target: !input light_target
+
+mode: single
