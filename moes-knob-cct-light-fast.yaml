@@ -1,0 +1,145 @@
+blueprint:
+  name: Zigbee2MQTT - Moes Knob (ERS-10TZBVK-AA) controls a CCT light
+  description: >
+    Select a Moes / Tuya smart knob (ERS-10TZBVK-AA) and a CCT (tunable white)
+    light, both paired in Zigbee2MQTT.
+
+    - Click: toggle the light on/off.
+
+    - Rotate right / left: brightness up / down in steps (default 10%),
+    never below the minimum (default 1%).
+
+    - Press and rotate right / left: color temperature up / down
+    (default 250 K), kept inside the light's own limits.
+
+
+    The knob must be in **command** mode (press it 3 times quickly, or set
+    "Operation mode" to "command" in the Zigbee2MQTT device page).
+    Rotation is ignored while the light is off.
+  domain: automation
+  source_url: https://github.com/cirolake/BlueprintsHA/blob/main/ERS-10TZBVK-AA.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    knob:
+      name: Knob
+      description: The Moes knob, as a device paired in Zigbee2MQTT.
+      selector:
+        device:
+          filter:
+            - integration: mqtt
+          multiple: false
+    light:
+      name: CCT light
+      description: The tunable white LED module, paired in Zigbee2MQTT.
+      selector:
+        entity:
+          filter:
+            - domain: light
+              integration: mqtt
+          multiple: false
+    advanced:
+      name: Advanced (defaults already match the request)
+      collapsed: true
+      input:
+        brightness_step:
+          name: Brightness step
+          default: 10
+          selector:
+            number: { min: 1, max: 50, step: 1, unit_of_measurement: "%" }
+        min_brightness:
+          name: Lowest brightness
+          default: 1
+          selector:
+            number: { min: 1, max: 50, step: 1, unit_of_measurement: "%" }
+        kelvin_step:
+          name: Color temperature step
+          default: 250
+          selector:
+            number: { min: 50, max: 1000, step: 50, unit_of_measurement: K }
+        base_topic:
+          name: Zigbee2MQTT base topic
+          description: Only change if you changed base_topic in the Zigbee2MQTT config.
+          default: zigbee2mqtt
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+trigger_variables:
+  base_topic: !input base_topic
+
+triggers:
+  # Every Zigbee2MQTT device publishes its button actions on <base>/<name>/action.
+  # The condition below keeps only the selected knob.
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+/action' }}"
+
+variables:
+  knob: !input knob
+  light_entity: !input light
+  step: !input brightness_step
+  min_pct: !input min_brightness
+  k_step: !input kelvin_step
+  knob_topic: "{{ base_topic ~ '/' ~ device_attr(knob, 'name') ~ '/action' }}"
+  action: "{{ trigger.payload }}"
+  is_on: "{{ is_state(light_entity, 'on') }}"
+  cur_pct: "{{ (((state_attr(light_entity, 'brightness') or 0) | int) / 255 * 100) | round(0) | int }}"
+  cur_k: "{{ state_attr(light_entity, 'color_temp_kelvin') }}"
+  min_k: "{{ (state_attr(light_entity, 'min_color_temp_kelvin') or 2000) | int }}"
+  max_k: "{{ (state_attr(light_entity, 'max_color_temp_kelvin') or 6500) | int }}"
+
+conditions:
+  - "{{ trigger.topic == knob_topic }}"
+  - "{{ action in ['toggle', 'single', 'brightness_step_up', 'brightness_step_down', 'color_temperature_step_up', 'color_temperature_step_down'] }}"
+
+# Command-mode actions sent by the knob:
+#   toggle                       click
+#   brightness_step_up           rotate right
+#   brightness_step_down         rotate left
+#   color_temperature_step_up    press + rotate right
+#   color_temperature_step_down  press + rotate left
+actions:
+  - choose:
+      # 1. Click: toggle ("single" covers the knob if it is left in event mode)
+      - conditions: "{{ action in ['toggle', 'single'] }}"
+        sequence:
+          - action: light.toggle
+            target:
+              entity_id: "{{ light_entity }}"
+
+      # 2. Rotate right: brightness up, snapping to multiples of the step (1% -> 10% -> 20% ...)
+      - conditions: "{{ action == 'brightness_step_up' and is_on }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              brightness_pct: "{{ [((cur_pct // step) + 1) * step, 100] | min }}"
+
+      # 2. Rotate left: brightness down, never below the minimum (... 20% -> 10% -> 1%)
+      - conditions: "{{ action == 'brightness_step_down' and is_on }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              brightness_pct: "{{ [(((cur_pct / step) | round(0, 'ceil') | int) - 1) * step, min_pct] | max }}"
+
+      # 3. Press + rotate right: cooler (more Kelvin)
+      - conditions: "{{ action == 'color_temperature_step_up' and is_on and cur_k is not none }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              color_temp_kelvin: "{{ [[(cur_k | int) + k_step, max_k] | min, min_k] | max }}"
+
+      # 3. Press + rotate left: warmer (less Kelvin)
+      - conditions: "{{ action == 'color_temperature_step_down' and is_on and cur_k is not none }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light_entity }}"
+            data:
+              color_temp_kelvin: "{{ [[(cur_k | int) - k_step, max_k] | min, min_k] | max }}"
