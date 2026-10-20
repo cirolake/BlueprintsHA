@@ -1,5 +1,5 @@
 blueprint:
-  name: Zigbee2MQTT - Moes Knob controls a light (simple)
+  name: Zigbee2MQTT - Moes Knob CCT
   description: >
     Reusable version of the "Moes Knob" automation. Works with any Moes / Tuya
     smart knob (ERS-10TZBVK-AA and similar) paired in Zigbee2MQTT.
