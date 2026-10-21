@@ -174,8 +174,8 @@
 
   <div class="item">
     <h3><code>light</code> — CCT light</h3>
-    <p class="meta">Entity picker · lights only · one light</p>
-    <p>The light the knob controls.</p>
+    <p class="meta">Entity picker · MQTT lights only · one light</p>
+    <p>The light the knob controls. Like the knob, it's only used to find the device's name in Zigbee2MQTT, because commands are sent to the light through MQTT.</p>
   </div>
 
   <div class="item">
@@ -187,7 +187,7 @@
   <div class="item">
     <h3><code>sensitivity</code> — Sensitivity</h3>
     <p class="meta">Default 1 · range 0.1–3</p>
-    <p>Each time you turn the knob, it reports a step size on a 0–255 scale, and a bigger turn gives a bigger number: the smallest click reports about 13 (5 %), a big turn about 133 (52 %). The blueprint turns that into a share of the light's full range and multiplies it by this setting. At 1 the light follows the knob exactly; at 0.5 every change is half as big.</p>
+    <p>Each time you turn the knob, it reports a step size on a 0–255 scale, and a bigger turn gives a bigger number: the smallest click reports about 13 (5 %), a big turn about 133 (52 %). The blueprint multiplies it by this setting before sending it to the light. At 1 the light follows the knob exactly; at 0.5 every change is half as big.</p>
   </div>
 
   <div class="item">
@@ -266,11 +266,9 @@
   </div>
 
   <div class="item">
-    <h3><code>step_size</code> and <code>fraction</code></h3>
-<pre><code>step_size: "{{ trigger.payload_json.action_step_size | int(25) }}"
-fraction:  "{{ [step_size / 255 * sensitivity | float, 1] | min }}"</code></pre>
-    <p><b><code>step_size</code></b> is the step size the knob reported, e.g. 133. If a message has none, it uses 25 (about 10 %).</p>
-    <p><b><code>fraction</code></b> is how much of the full range to move: step size ÷ 255 × sensitivity, capped at 1 (100 %). Brightness and color temperature both use it.</p>
+    <h3><code>step</code></h3>
+<pre><code>step: "{{ (trigger.payload_json.action_step_size | int(0) * sensitivity | float) | round(0) | int }}"</code></pre>
+    <p>The knob's step size multiplied by <code>sensitivity</code>. The knob reports it on Zigbee's 0–255 scale: about 13 for the smallest click and about 133 for a big turn. The light uses the same scale, so no conversion is needed.</p>
   </div>
 
   <div class="item">
@@ -280,9 +278,11 @@ fraction:  "{{ [step_size / 255 * sensitivity | float, 1] | min }}"</code></pre>
   </div>
 
   <div class="item">
-    <h3><code>knob_topic</code></h3>
-<pre><code>knob_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(knob), 'name') }}"</code></pre>
-    <p>Builds the MQTT topic your knob publishes on. From the selected entity it finds the device (<code>device_id</code>), reads the device's name (<code>device_attr</code>), and adds the base topic in front, e.g. <code>zigbee2mqtt/Botão Giro Sala</code>.</p>
+    <h3><code>knob_topic</code> and <code>light_topic</code></h3>
+<pre><code>knob_topic:  "{{ base_topic ~ '/' ~ device_attr(device_id(knob), 'name') }}"
+light_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(light), 'name') ~ '/set' }}"</code></pre>
+    <p>The MQTT topics of the two devices. From the selected entity each one finds the device (<code>device_id</code>), reads the device's name (<code>device_attr</code>), and adds the base topic in front, e.g. <code>zigbee2mqtt/Botão Giro Sala</code>.</p>
+    <p>The knob publishes on its topic; the light listens for commands on its topic plus <code>/set</code>.</p>
     <p>This works because the device name Home Assistant gets from Zigbee2MQTT is the friendly name. Renaming the device in Home Assistant is fine (that's stored separately). Renaming it in Zigbee2MQTT updates Home Assistant automatically.</p>
   </div>
 
@@ -296,34 +296,27 @@ fraction:  "{{ [step_size / 255 * sensitivity | float, 1] | min }}"</code></pre>
   <h2 id="actions">Actions</h2>
 
   <div class="item">
-    <h3><code>choose</code></h3>
-    <p>Runs the first branch whose condition matches the <code>action</code> variable; the others are skipped.</p>
+    <h3><code>choose</code> and <code>mqtt.publish</code></h3>
+    <p>Runs the first branch whose condition matches the <code>action</code> variable. Each branch sends one command straight to the light through Zigbee2MQTT (<code>mqtt.publish</code> to <code>light_topic</code>). Zigbee2MQTT and the light handle the rest: stepping from the current value, and stopping at the light's limits.</p>
   </div>
 
   <div class="item">
-    <h3>Click → <code>light.toggle</code></h3>
-    <p>The light is switched to the opposite of its current state.</p>
+    <h3>Click → <code>{"state": "TOGGLE"}</code></h3>
+    <p>The light switches to the opposite of its current state.</p>
   </div>
 
   <div class="item">
-    <h3>Turn right / left → <code>light.turn_on</code> with <code>brightness_step_pct</code></h3>
-<pre><code>brightness_step_pct: "{{ (fraction * 100) | round(0) | int }}"        # turn right: +52 %
-brightness_step_pct: "{{ -((fraction * 100) | round(0) | int) }}"     # turn left:  -52 %</code></pre>
-    <p>Asks Home Assistant to change the light's brightness relative to where it is now. Home Assistant handles the limits: it won't go above 100 %. Stepping down past the minimum turns the light off, and turning right while the light is off turns it on.</p>
+    <h3>Turn right / left → <code>brightness_step</code></h3>
+<pre><code>{"brightness_step": 13, "transition": 0.1}     # one click right
+{"brightness_step": -13, "transition": 0.1}    # one click left</code></pre>
+    <p>Raises or lowers brightness by <code>step</code> on the light's 0–254 scale. This is the same command the knob would send if it were bound directly to the light. The module stops at its minimum brightness instead of turning off, and turning while the light is off does nothing.</p>
   </div>
 
   <div class="item">
-    <h3>Press and turn → <code>light.turn_on</code> with <code>color_temp_kelvin</code></h3>
-<pre><code>{% set lo  = state_attr(light, 'min_color_temp_kelvin') | int(2000) %}
-{% set hi  = state_attr(light, 'max_color_temp_kelvin') | int(6500) %}
-{% set cur = state_attr(light, 'color_temp_kelvin') | int((lo + hi) // 2) %}
-{% set size = ((hi - lo) * fraction) | round(0) | int %}
-{{ [[cur ± size, hi] | min, lo] | max }}</code></pre>
-    <p>Home Assistant has no "step the color temperature" command, so the blueprint works out the new value itself:</p>
-    <p><b><code>lo</code> / <code>hi</code></b> — the warmest and coolest the light supports. The FUT035Z reports about 2000–6500 K; 2000 and 6500 are fallbacks if the light doesn't say.</p>
-    <p><b><code>cur</code></b> — the light's current temperature. If it doesn't report one (for example while off), it starts from the middle of its range.</p>
-    <p><b><code>size</code></b> — the same share of the range as brightness, in kelvin. For example, 52 % of 2000–6500 K is about 2300 K.</p>
-    <p><b>Last line</b> — adds or subtracts it, then keeps the result between <code>lo</code> and <code>hi</code>.</p>
+    <h3>Press and turn → <code>color_temp_step</code></h3>
+<pre><code>{"color_temp_step": -13, "transition": 0.1}    # press + right: cooler
+{"color_temp_step": 13, "transition": 0.1}     # press + left:  warmer</code></pre>
+    <p>Changes the color temperature by <code>step</code> <b>mireds</b>, Zigbee's unit for color temperature. Mireds run the opposite way to kelvin: more mireds means warmer. That's why turning right (cooler) sends a negative number. The FUT035Z+ supports 153–500 mireds, about 6500–2000 K; the light keeps itself inside that range.</p>
   </div>
 </main>
 </body>
