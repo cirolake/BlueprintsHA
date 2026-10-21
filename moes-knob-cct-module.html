@@ -185,9 +185,9 @@
   </div>
 
   <div class="item">
-    <h3><code>sensitivity</code> — Sensitivity</h3>
-    <p class="meta">Default 1 · range 0.1–3</p>
-    <p>Each time you turn the knob, it reports a step size on a 0–255 scale, and a bigger turn gives a bigger number: the smallest click reports about 13 (5 %), a big turn about 133 (52 %). The blueprint multiplies it by this setting before sending it to the light. At 1 the light follows the knob exactly; at 0.5 every change is half as big.</p>
+    <h3><code>brightness_sensitivity</code> and <code>temperature_sensitivity</code></h3>
+    <p class="meta">Default 1 · range 0.1–3 · one for turning, one for pressing and turning</p>
+    <p>Each time you turn the knob, it reports a step size on a 0–255 scale, and a bigger turn gives a bigger number: the smallest click reports about 13 (5 %), a big turn about 133 (52 %). The blueprint multiplies it by the matching sensitivity before sending it to the light. At 1 the light follows the knob exactly; at 0.5 every change is half as big. Set them separately if, for example, temperature should change more slowly than brightness.</p>
   </div>
 
   <div class="item">
@@ -255,7 +255,7 @@
   <h2 id="variables">Variables</h2>
 
   <div class="item">
-    <h3><code>knob</code>, <code>light</code>, <code>sensitivity</code></h3>
+    <h3><code>knob</code>, <code>light</code>, <code>brightness_sensitivity</code>, <code>temperature_sensitivity</code></h3>
     <p>Copies of the inputs, so templates can use them. <code>!input</code> can't be used inside a template directly.</p>
   </div>
 
@@ -266,15 +266,16 @@
   </div>
 
   <div class="item">
-    <h3><code>step</code></h3>
-<pre><code>step: "{{ (trigger.payload_json.action_step_size | int(0) * sensitivity | float) | round(0) | int }}"</code></pre>
-    <p>The knob's step size multiplied by <code>sensitivity</code>. The knob reports it on Zigbee's 0–255 scale: about 13 for the smallest click and about 133 for a big turn. The light uses the same scale, so no conversion is needed.</p>
+    <h3><code>sensitivity</code> and <code>step</code></h3>
+<pre><code>sensitivity: "{{ brightness_sensitivity if action.startswith('brightness') else temperature_sensitivity }}"
+step: "{{ (trigger.payload_json.action_step_size | int(0) * sensitivity | float) | round(0) | int }}"</code></pre>
+    <p><code>sensitivity</code> picks the brightness or temperature setting, depending on the action. <code>step</code> is the knob's step size multiplied by it. The knob reports it on Zigbee's 0–255 scale: about 13 for the smallest click and about 133 for a big turn. The light uses the same scale, so no conversion is needed.</p>
   </div>
 
   <div class="item">
     <h3><code>transition</code></h3>
 <pre><code>transition: "{{ trigger.payload_json.action_transition_time | float(0) }}"</code></pre>
-    <p>How long the knob asks the light to take to reach the new value, e.g. 0.1 s for one click or 0.3 s for a big turn. It's passed to the light, so changes fade smoothly instead of jumping. It doesn't change how big a step is; only <code>sensitivity</code> does that.</p>
+    <p>How long the knob asks the light to take to reach the new value, e.g. 0.1 s for one click or 0.3 s for a big turn. It's passed to the light, so changes fade smoothly instead of jumping. It doesn't change how big a step is; only the sensitivity settings do that.</p>
   </div>
 
   <div class="item">

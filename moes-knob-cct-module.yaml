@@ -13,7 +13,7 @@ blueprint:
 
     Each change uses the step size and transition time the knob reports
     (a bigger turn sends a bigger step), with the step multiplied by the
-    Sensitivity setting. The light stops at its minimum brightness and
+    brightness or color temperature sensitivity. The light stops at its minimum brightness and
     color temperature limits by itself.
 
     The knob should be in **command** mode (press it 3 times quickly, or set
@@ -43,11 +43,19 @@ blueprint:
       name: Advanced
       collapsed: true
       input:
-        sensitivity:
-          name: Sensitivity
+        brightness_sensitivity:
+          name: Brightness sensitivity
           description: >
-            Multiplies the step size reported by the knob. 1 = as reported,
-            0.5 = half as much change, 2 = twice as much.
+            Multiplies the step size reported by the knob when turning.
+            1 = as reported, 0.5 = half as much change, 2 = twice as much.
+          default: 1
+          selector:
+            number: { min: 0.1, max: 3, step: 0.1, mode: slider }
+        temperature_sensitivity:
+          name: Color temperature sensitivity
+          description: >
+            Multiplies the step size reported by the knob when pressing and
+            turning. 1 = as reported, 0.5 = half as much change, 2 = twice as much.
           default: 1
           selector:
             number: { min: 0.1, max: 3, step: 0.1, mode: slider }
@@ -91,9 +99,11 @@ triggers:
 variables:
   knob: !input knob
   light: !input light
-  sensitivity: !input sensitivity
+  brightness_sensitivity: !input brightness_sensitivity
+  temperature_sensitivity: !input temperature_sensitivity
   action: "{{ trigger.payload_json.action }}"
   # Step on the Zigbee 0-255 scale (smallest click ~13, big turn ~133).
+  sensitivity: "{{ brightness_sensitivity if action.startswith('brightness') else temperature_sensitivity }}"
   step: "{{ (trigger.payload_json.action_step_size | int(0) * sensitivity | float) | round(0) | int }}"
   # How long the knob asks the light to take to reach the new value (e.g. 0.1 s).
   transition: "{{ trigger.payload_json.action_transition_time | float(0) }}"
@@ -133,5 +143,5 @@ actions:
             data:
               topic: "{{ light_topic }}"
               payload: >
-                {"color_temp_step": {{ -step if action == 'color_temperature_step_up' else step }},
+                {"color_temp_step": {{ step if action == 'color_temperature_step_up' else -step }},
                  "transition": {{ transition }}}
