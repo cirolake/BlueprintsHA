@@ -1,0 +1,180 @@
+blueprint:
+  name: Zigbee2MQTT - Moes Knob controls CCT module
+  description: >
+    One or more Moes smart knobs (ERS-10TZBVK-AA) control one or more CCT
+    (tunable white) modules such as the Miboxer FUT035Z, all paired in
+    Zigbee2MQTT.
+
+
+    - Click: toggle the lights on / off.
+
+    - Rotate right / left: brightness up / down (default 10% per step).
+
+    - Press and rotate right / left: cooler / warmer white (default 250 K
+    per step), kept inside each light's own limits.
+
+
+    Rotation is ignored while the lights are off. The knob should be in
+    **command** mode (press it 3 times quickly, or set "Operation mode" to
+    "command" in the Zigbee2MQTT device page). In event mode click and
+    rotate still work, but press and rotate does not.
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    knobs:
+      name: Knob(s)
+      description: >
+        Any entity of each knob (for example its battery or operation mode).
+        The knob itself is found from the entity's device.
+      selector:
+        entity:
+          filter:
+            - integration: mqtt
+          multiple: true
+    lights:
+      name: CCT light(s)
+      selector:
+        entity:
+          filter:
+            - domain: light
+          multiple: true
+    advanced:
+      name: Advanced
+      collapsed: true
+      input:
+        brightness_step:
+          name: Brightness step
+          default: 10
+          selector:
+            number: { min: 1, max: 50, step: 1, unit_of_measurement: "%" }
+        kelvin_step:
+          name: Color temperature step
+          default: 250
+          selector:
+            number: { min: 50, max: 1000, step: 50, unit_of_measurement: K }
+        base_topic:
+          name: Zigbee2MQTT base topic
+          description: Only change if you changed base_topic in the Zigbee2MQTT config.
+          default: zigbee2mqtt
+          selector:
+            text:
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+trigger_variables:
+  base_topic: !input base_topic
+
+# Zigbee2MQTT publishes the knob's action inside its state message on
+# <base>/<friendly name>. Each trigger fires only for one action value, so
+# state updates from other devices never start the automation.
+triggers:
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: toggle
+    id: toggle
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: single
+    id: toggle
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: brightness_step_up
+    id: brightness_up
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: rotate_right
+    id: brightness_up
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: brightness_step_down
+    id: brightness_down
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: rotate_left
+    id: brightness_down
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: color_temperature_step_up
+    id: kelvin_up
+  - trigger: mqtt
+    topic: "{{ base_topic ~ '/+' }}"
+    value_template: "{{ value_json.action | default('') }}"
+    payload: color_temperature_step_down
+    id: kelvin_down
+
+variables:
+  knobs: !input knobs
+  lights: !input lights
+  step: !input brightness_step
+  k_step: !input kelvin_step
+  # Device name in Home Assistant = friendly name in Zigbee2MQTT.
+  knob_topics: >
+    {% set ns = namespace(t=[]) %}
+    {% for e in knobs %}
+      {% set d = device_id(e) %}
+      {% if d %}{% set ns.t = ns.t + [base_topic ~ '/' ~ device_attr(d, 'name')] %}{% endif %}
+    {% endfor %}
+    {{ ns.t }}
+  lights_on: "{{ lights | select('is_state', 'on') | list }}"
+
+conditions:
+  - "{{ trigger.topic in knob_topics }}"
+
+actions:
+  - choose:
+      - conditions: "{{ trigger.id == 'toggle' }}"
+        sequence:
+          - action: light.toggle
+            target:
+              entity_id: "{{ lights }}"
+
+      - conditions: "{{ trigger.id == 'brightness_up' and lights_on | count > 0 }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ lights_on }}"
+            data:
+              brightness_step_pct: "{{ step | int }}"
+
+      # Never step below 1% here, so rotating left does not switch the light off.
+      - conditions: "{{ trigger.id == 'brightness_down' and lights_on | count > 0 }}"
+        sequence:
+          - repeat:
+              for_each: "{{ lights_on }}"
+              sequence:
+                - action: light.turn_on
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    brightness_pct: >
+                      {% set cur = ((state_attr(repeat.item, 'brightness') or 0) | int / 255 * 100) | round(0) | int %}
+                      {{ [cur - step | int, 1] | max }}
+
+      # Each light keeps its own color temperature, so step them one by one.
+      - conditions: "{{ trigger.id in ['kelvin_up', 'kelvin_down'] and lights_on | count > 0 }}"
+        sequence:
+          - repeat:
+              for_each: "{{ lights_on }}"
+              sequence:
+                - variables:
+                    cur_k: "{{ state_attr(repeat.item, 'color_temp_kelvin') }}"
+                    min_k: "{{ (state_attr(repeat.item, 'min_color_temp_kelvin') or 2000) | int }}"
+                    max_k: "{{ (state_attr(repeat.item, 'max_color_temp_kelvin') or 6500) | int }}"
+                    delta: "{{ k_step | int if trigger.id == 'kelvin_up' else -(k_step | int) }}"
+                - action: light.turn_on
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    color_temp_kelvin: >
+                      {% set base = cur_k | int if cur_k is not none else ((min_k + max_k) / 2) | int %}
+                      {{ [[base + delta, max_k] | min, min_k] | max }}
