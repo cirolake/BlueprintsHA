@@ -59,6 +59,14 @@ blueprint:
           default: 1
           selector:
             number: { min: 0.1, max: 3, step: 0.1, mode: slider }
+        use_transition:
+          name: Use the knob's transition time
+          description: >
+            On: each change fades over the time the knob reports (0.1-0.3 s).
+            Off: changes are applied instantly.
+          default: true
+          selector:
+            boolean:
         base_topic:
           name: Zigbee2MQTT base topic
           description: Only change if you changed base_topic in the Zigbee2MQTT config.
@@ -101,12 +109,14 @@ variables:
   light: !input light
   brightness_sensitivity: !input brightness_sensitivity
   temperature_sensitivity: !input temperature_sensitivity
+  use_transition: !input use_transition
   action: "{{ trigger.payload_json.action }}"
   # Step on the Zigbee 0-255 scale (smallest click ~13, big turn ~133).
   sensitivity: "{{ brightness_sensitivity if action.startswith('brightness') else temperature_sensitivity }}"
   step: "{{ (trigger.payload_json.action_step_size | int(0) * sensitivity | float) | round(0) | int }}"
-  # How long the knob asks the light to take to reach the new value (e.g. 0.1 s).
-  transition: "{{ trigger.payload_json.action_transition_time | float(0) }}"
+  # How long the knob asks the light to take to reach the new value (e.g. 0.1 s),
+  # or 0 (instant) when use_transition is off.
+  transition: "{{ trigger.payload_json.action_transition_time | float(0) if use_transition else 0 }}"
   # Device name in Home Assistant = friendly name in Zigbee2MQTT.
   knob_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(knob), 'name') }}"
   light_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(light), 'name') ~ '/set' }}"

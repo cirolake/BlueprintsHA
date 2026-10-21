@@ -191,6 +191,12 @@
   </div>
 
   <div class="item">
+    <h3><code>use_transition</code> — Use the knob's transition time</h3>
+    <p class="meta">On/off switch · default on</p>
+    <p><b>On:</b> each brightness or color temperature change fades over the time the knob reports, 0.1–0.3 s depending on how far you turn. <b>Off:</b> changes are applied instantly. Turning it off also means less radio traffic, because the light sends extra state reports while it fades.</p>
+  </div>
+
+  <div class="item">
     <h3><code>base_topic</code> — Zigbee2MQTT base topic</h3>
     <p class="meta">Default <code>zigbee2mqtt</code></p>
     <p>The first part of every Zigbee2MQTT MQTT topic. Only change it if you changed <code>base_topic</code> in the Zigbee2MQTT configuration.</p>
@@ -255,7 +261,7 @@
   <h2 id="variables">Variables</h2>
 
   <div class="item">
-    <h3><code>knob</code>, <code>light</code>, <code>brightness_sensitivity</code>, <code>temperature_sensitivity</code></h3>
+    <h3><code>knob</code>, <code>light</code>, <code>brightness_sensitivity</code>, <code>temperature_sensitivity</code>, <code>use_transition</code></h3>
     <p>Copies of the inputs, so templates can use them. <code>!input</code> can't be used inside a template directly.</p>
   </div>
 
@@ -274,8 +280,8 @@ step: "{{ (trigger.payload_json.action_step_size | int(0) * sensitivity | float)
 
   <div class="item">
     <h3><code>transition</code></h3>
-<pre><code>transition: "{{ trigger.payload_json.action_transition_time | float(0) }}"</code></pre>
-    <p>How long the knob asks the light to take to reach the new value, e.g. 0.1 s for one click or 0.3 s for a big turn. It's passed to the light, so changes fade smoothly instead of jumping. It doesn't change how big a step is; only the sensitivity settings do that.</p>
+<pre><code>transition: "{{ trigger.payload_json.action_transition_time | float(0) if use_transition else 0 }}"</code></pre>
+    <p>How long the knob asks the light to take to reach the new value, e.g. 0.1 s for one click or 0.3 s for a big turn. It's passed to the light, so changes fade smoothly instead of jumping. When <code>use_transition</code> is off it's always 0, so changes are instant. It doesn't change how big a step is; only the sensitivity settings do that.</p>
   </div>
 
   <div class="item">

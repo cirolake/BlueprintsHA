@@ -13,4 +13,7 @@
 - [ERS-10TZBVK-AA.yaml](BlueprintsHA/ERS-10TZBVK-AA.yaml)
   - Funcionou mas com um delay muito grande e muita instabilidade.
   - Acho que os steps e % não funcionaram muito bem.
-  
+
+
+- include a use_transition toggle on blueprint inputs, and when it is off, don't use transition.
+- 
