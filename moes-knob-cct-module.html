@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moes Knob Blueprint</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --text: #1d1d1b;
+    --muted: #5f5f5a;
+    --border: #e2e1dc;
+    --accent: #0b6e69;
+    --code-bg: #f0efea;
+    --warn-bg: #fff6e0;
+    --warn-border: #e6c56b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615;
+      --surface: #1f1f1d;
+      --text: #ecebe6;
+      --muted: #a3a29b;
+      --border: #34332f;
+      --accent: #5cc8bf;
+      --code-bg: #2a2a27;
+      --warn-bg: #2e2716;
+      --warn-border: #7a6528;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615;
+    --surface: #1f1f1d;
+    --text: #ecebe6;
+    --muted: #a3a29b;
+    --border: #34332f;
+    --accent: #5cc8bf;
+    --code-bg: #2a2a27;
+    --warn-bg: #2e2716;
+    --warn-border: #7a6528;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 8px; }
+  .lede { color: var(--muted); margin: 0 0 32px; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 48px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 0 0 6px; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  nav a {
+    font-size: .875rem;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--surface);
+  }
+  nav a:hover { border-color: var(--accent); color: var(--accent); }
+  .item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 12px 0;
+  }
+  .item p { margin: 6px 0; }
+  .meta { font-size: .875rem; color: var(--muted); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .875em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-size: .8125rem;
+    line-height: 1.5;
+    margin: 10px 0 4px;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .note {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0 0;
+    font-size: .9375rem;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: .9375rem; margin: 8px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .8125rem; text-transform: uppercase; letter-spacing: .03em; }
+  .table-wrap { overflow-x: auto; }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 0; }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: .9375rem;
+  }
+  .arrow { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Moes Knob → CCT module blueprint</h1>
+  <p class="lede">What every setting in <code>moes-knob-cct-module.yaml</code> does, top to bottom.</p>
+
+  <nav>
+    <a href="#flow">How it works</a>
+    <a href="#header">Header</a>
+    <a href="#inputs">Inputs</a>
+    <a href="#mode">Mode</a>
+    <a href="#triggers">Triggers</a>
+    <a href="#variables">Variables</a>
+    <a href="#conditions">Conditions</a>
+    <a href="#actions">Actions</a>
+  </nav>
+
+  <h2 id="flow">How it works</h2>
+  <div class="flow">
+    <span class="step">Knob is clicked or turned</span><span class="arrow">→</span>
+    <span class="step">Zigbee2MQTT publishes <code>{"action": "..."}</code></span><span class="arrow">→</span>
+    <span class="step">Trigger matches the action</span><span class="arrow">→</span>
+    <span class="step">Condition checks it came from your knob</span><span class="arrow">→</span>
+    <span class="step">Action changes the light</span>
+  </div>
+
+  <h2 id="header">Blueprint header</h2>
+
+  <div class="item">
+    <h3><code>name</code></h3>
+    <p>The title shown in <b>Settings → Automations &amp; scenes → Blueprints</b>.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>description</code></h3>
+    <p>The help text shown when you create an automation from the blueprint. The <code>&gt;</code> joins lines into one paragraph, so a blank line is needed between bullet points to keep them as a list.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>domain: automation</code></h3>
+    <p>Makes this an automation blueprint, not a script blueprint.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>homeassistant: min_version: "2024.10.0"</code></h3>
+    <p>Home Assistant refuses to import the blueprint on older versions. 2024.10 is the first release that understands the newer <code>triggers:</code> / <code>trigger: mqtt</code> / <code>action:</code> syntax used below.</p>
+  </div>
+
+  <h2 id="inputs">Inputs (what you fill in)</h2>
+
+  <div class="item">
+    <h3><code>knob</code> — Knob</h3>
+    <p class="meta">Entity picker · MQTT entities only · one knob</p>
+    <p>Pick <b>any one entity</b> of the knob, such as its battery sensor or operation mode. The blueprint doesn't use that entity's state. It only uses it to find the knob's device, and from the device, the knob's name in Zigbee2MQTT. For several knobs, create one automation per knob.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>light</code> — CCT light</h3>
+    <p class="meta">Entity picker · lights only · one light</p>
+    <p>The light the knob controls.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>advanced</code></h3>
+    <p class="meta"><code>collapsed: true</code></p>
+    <p>A folded section in the form, so the defaults stay out of the way.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>brightness_step</code> — Brightness step</h3>
+    <p class="meta">Default 10 % · range 1–50 %</p>
+    <p>How much brightness changes for each step of rotation. Turning fast sends several steps in a row.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>kelvin_step</code> — Color temperature step</h3>
+    <p class="meta">Default 250 K · range 50–1000 K</p>
+    <p>How much the white temperature changes for each step while pressing and turning. Higher kelvin is cooler (bluer); lower is warmer (yellower).</p>
+  </div>
+
+  <div class="item">
+    <h3><code>base_topic</code> — Zigbee2MQTT base topic</h3>
+    <p class="meta">Default <code>zigbee2mqtt</code></p>
+    <p>The first part of every Zigbee2MQTT MQTT topic. Only change it if you changed <code>base_topic</code> in the Zigbee2MQTT configuration.</p>
+  </div>
+
+  <h2 id="mode">Run mode</h2>
+
+  <div class="item">
+    <h3><code>mode: single</code></h3>
+    <p>What happens if the knob sends a new action while the previous one is still being handled.</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Mode</th><th>New trigger during a run</th><th>Effect with the knob</th></tr>
+        <tr><td><code>single</code> (current)</td><td>Ignored</td><td>A fast turn may skip some steps</td></tr>
+        <tr><td><code>queued</code></td><td>Waits its turn</td><td>Every step is applied, in order</td></tr>
+        <tr><td><code>restart</code></td><td>Stops the current run, starts the new one</td><td>Steps can be cut off halfway</td></tr>
+        <tr><td><code>parallel</code></td><td>Runs at the same time</td><td>Steps can overlap and read stale values</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="item">
+    <h3><code>max: 10</code></h3>
+    <p>How many runs may wait (<code>queued</code>) or run at once (<code>parallel</code>).</p>
+    <p class="note">With <code>mode: single</code> this line has no effect. It only matters if you switch back to <code>queued</code> or <code>parallel</code>.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>max_exceeded: silent</code></h3>
+    <p>When a trigger is dropped (in <code>single</code> mode: any trigger that arrives during a run), don't write a warning to the log. Without it, turning the knob would fill the log with "Already running" warnings.</p>
+  </div>
+
+  <h2 id="triggers">Triggers</h2>
+
+  <div class="item">
+    <h3><code>trigger_variables: base_topic</code></h3>
+    <p>Makes the <code>base_topic</code> input available inside the trigger. Triggers are set up before the automation runs, so they can only use these special variables, not the normal <code>variables</code> block.</p>
+  </div>
+
+  <div class="item">
+    <h3>The five MQTT triggers</h3>
+<pre><code>- trigger: mqtt
+  topic: "{{ base_topic ~ '/+' }}"
+  value_template: "{{ value_json.action | default('') }}"
+  payload: brightness_step_up</code></pre>
+    <p><b><code>topic</code></b> — listens to <code>zigbee2mqtt/&lt;any device name&gt;</code>. The <code>+</code> matches exactly one level, so it receives every device's state message but not sub-topics such as <code>/availability</code> or <code>/set</code>.</p>
+    <p><b><code>value_template</code></b> — reads the <code>action</code> field from the message. Messages without an action, such as a sensor reporting its temperature, give an empty value.</p>
+    <p><b><code>payload</code></b> — the trigger only fires when that value equals this text exactly. That's why there are five triggers, one per action the knob sends in command mode:</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Action</th><th>Knob gesture</th></tr>
+        <tr><td><code>toggle</code></td><td>Click</td></tr>
+        <tr><td><code>brightness_step_up</code></td><td>Turn right</td></tr>
+        <tr><td><code>brightness_step_down</code></td><td>Turn left</td></tr>
+        <tr><td><code>color_temperature_step_up</code></td><td>Press and turn right</td></tr>
+        <tr><td><code>color_temperature_step_down</code></td><td>Press and turn left</td></tr>
+      </table>
+    </div>
+    <p>Because the action is checked inside the trigger, ordinary state updates from your other Zigbee devices never start the automation.</p>
+  </div>
+
+  <h2 id="variables">Variables</h2>
+
+  <div class="item">
+    <h3><code>knob</code>, <code>light</code>, <code>step</code>, <code>k_step</code></h3>
+    <p>Copies of the inputs, so templates can use them. <code>!input</code> can't be used inside a template directly.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>action</code></h3>
+<pre><code>action: "{{ trigger.payload_json.action }}"</code></pre>
+    <p>The action that fired this run, such as <code>brightness_step_up</code>. The actions below use it to choose what to do.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>knob_topic</code></h3>
+<pre><code>knob_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(knob), 'name') }}"</code></pre>
+    <p>Builds the MQTT topic your knob publishes on. From the selected entity it finds the device (<code>device_id</code>), reads the device's name (<code>device_attr</code>), and adds the base topic in front, e.g. <code>zigbee2mqtt/Botão Giro Sala</code>.</p>
+    <p>This works because the device name Home Assistant gets from Zigbee2MQTT is the friendly name. Renaming the device in Home Assistant is fine (that's stored separately). Renaming it in Zigbee2MQTT updates Home Assistant automatically.</p>
+  </div>
+
+  <h2 id="conditions">Conditions</h2>
+
+  <div class="item">
+    <h3><code>trigger.topic == knob_topic</code></h3>
+    <p>The triggers accept actions from <b>any</b> device. This line keeps only messages from the knob you selected, so another remote that also sends <code>toggle</code> won't switch this light.</p>
+  </div>
+
+  <h2 id="actions">Actions</h2>
+
+  <div class="item">
+    <h3><code>choose</code></h3>
+    <p>Runs the first branch whose condition matches the <code>action</code> variable; the others are skipped.</p>
+  </div>
+
+  <div class="item">
+    <h3>Click → <code>light.toggle</code></h3>
+    <p>The light is switched to the opposite of its current state.</p>
+  </div>
+
+  <div class="item">
+    <h3>Turn right / left → <code>light.turn_on</code> with <code>brightness_step_pct</code></h3>
+<pre><code>brightness_step_pct: "{{ step | int }}"       # turn right: +10 %
+brightness_step_pct: "{{ -(step | int) }}"    # turn left:  -10 %</code></pre>
+    <p>Asks Home Assistant to change the light's brightness relative to where it is now. Home Assistant handles the limits: it won't go above 100 %. Stepping down past the minimum turns the light off, and turning right while the light is off turns it on.</p>
+  </div>
+
+  <div class="item">
+    <h3>Press and turn → <code>light.turn_on</code> with <code>color_temp_kelvin</code></h3>
+<pre><code>{% set lo  = state_attr(light, 'min_color_temp_kelvin') | int(2000) %}
+{% set hi  = state_attr(light, 'max_color_temp_kelvin') | int(6500) %}
+{% set cur = state_attr(light, 'color_temp_kelvin') | int((lo + hi) // 2) %}
+{{ [[cur ± k_step, hi] | min, lo] | max }}</code></pre>
+    <p>Home Assistant has no "step the color temperature" command, so the blueprint works out the new value itself:</p>
+    <p><b><code>lo</code> / <code>hi</code></b> — the warmest and coolest the light supports. The FUT035Z reports about 2000–6500 K; 2000 and 6500 are fallbacks if the light doesn't say.</p>
+    <p><b><code>cur</code></b> — the light's current temperature. If it doesn't report one (for example while off), it starts from the middle of its range.</p>
+    <p><b>Last line</b> — adds or subtracts the step, then keeps the result between <code>lo</code> and <code>hi</code>.</p>
+  </div>
+</main>
+</body>
+</html>

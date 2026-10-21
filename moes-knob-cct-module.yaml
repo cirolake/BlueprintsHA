@@ -1,17 +1,15 @@
 blueprint:
   name: Zigbee2MQTT - Moes Knob controls CCT module
   description: >
-    One or more Moes smart knobs (ERS-10TZBVK-AA) control one or more CCT
-    (tunable white) modules such as the Miboxer FUT035Z, all paired in
-    Zigbee2MQTT.
+    One Moes smart knob (ERS-10TZBVK-AA) controls one CCT (tunable white)
+    module such as the Miboxer FUT035Z, both paired in Zigbee2MQTT.
+    Create one automation per knob.
 
-
-    - Click: toggle the lights on / off.
+    - Click: toggle the light on / off.
 
     - Rotate right / left: brightness up / down.
 
     - Press and rotate right / left: cooler / warmer white.
-
 
     The knob should be in **command** mode (press it 3 times quickly, or set
     "Operation mode" to "command" in the Zigbee2MQTT device page).
@@ -19,23 +17,21 @@ blueprint:
   homeassistant:
     min_version: "2024.10.0"
   input:
-    knobs:
-      name: Knob(s)
+    knob:
+      name: Knob
       description: >
-        Any entity of each knob (for example its battery or operation mode).
+        Any entity of the knob (for example its battery or operation mode).
         The knob itself is found from the entity's device.
       selector:
         entity:
           filter:
             - integration: mqtt
-          multiple: true
-    lights:
-      name: CCT light(s)
+    light:
+      name: CCT light
       selector:
         entity:
           filter:
             - domain: light
-          multiple: true
     advanced:
       name: Advanced
       collapsed: true
@@ -57,7 +53,7 @@ blueprint:
           selector:
             text:
 
-mode: queued
+mode: single
 max: 10
 max_exceeded: silent
 
@@ -88,22 +84,16 @@ triggers:
     payload: color_temperature_step_down
 
 variables:
-  knobs: !input knobs
-  lights: !input lights
+  knob: !input knob
+  light: !input light
   step: !input brightness_step
   k_step: !input kelvin_step
   action: "{{ trigger.payload_json.action }}"
   # Device name in Home Assistant = friendly name in Zigbee2MQTT.
-  knob_topics: >
-    {% set ns = namespace(t=[]) %}
-    {% for e in knobs %}
-      {% set d = device_id(e) %}
-      {% if d %}{% set ns.t = ns.t + [base_topic ~ '/' ~ device_attr(d, 'name')] %}{% endif %}
-    {% endfor %}
-    {{ ns.t }}
+  knob_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(knob), 'name') }}"
 
 conditions:
-  - "{{ trigger.topic in knob_topics }}"
+  - "{{ trigger.topic == knob_topic }}"
 
 actions:
   - choose:
@@ -111,13 +101,13 @@ actions:
         sequence:
           - action: light.toggle
             target:
-              entity_id: "{{ lights }}"
+              entity_id: "{{ light }}"
 
       - conditions: "{{ action == 'brightness_step_up' }}"
         sequence:
           - action: light.turn_on
             target:
-              entity_id: "{{ lights }}"
+              entity_id: "{{ light }}"
             data:
               brightness_step_pct: "{{ step | int }}"
 
@@ -125,22 +115,19 @@ actions:
         sequence:
           - action: light.turn_on
             target:
-              entity_id: "{{ lights }}"
+              entity_id: "{{ light }}"
             data:
               brightness_step_pct: "{{ -(step | int) }}"
 
       - conditions: "{{ action in ['color_temperature_step_up', 'color_temperature_step_down'] }}"
         sequence:
-          - repeat:
-              for_each: "{{ lights }}"
-              sequence:
-                - action: light.turn_on
-                  target:
-                    entity_id: "{{ repeat.item }}"
-                  data:
-                    color_temp_kelvin: >
-                      {% set lo = state_attr(repeat.item, 'min_color_temp_kelvin') | int(2000) %}
-                      {% set hi = state_attr(repeat.item, 'max_color_temp_kelvin') | int(6500) %}
-                      {% set cur = state_attr(repeat.item, 'color_temp_kelvin') | int((lo + hi) // 2) %}
-                      {% set delta = k_step | int if action == 'color_temperature_step_up' else -(k_step | int) %}
-                      {{ [[cur + delta, hi] | min, lo] | max }}
+          - action: light.turn_on
+            target:
+              entity_id: "{{ light }}"
+            data:
+              color_temp_kelvin: >
+                {% set lo = state_attr(light, 'min_color_temp_kelvin') | int(2000) %}
+                {% set hi = state_attr(light, 'max_color_temp_kelvin') | int(6500) %}
+                {% set cur = state_attr(light, 'color_temp_kelvin') | int((lo + hi) // 2) %}
+                {% set delta = k_step | int if action == 'color_temperature_step_up' else -(k_step | int) %}
+                {{ [[cur + delta, hi] | min, lo] | max }}
