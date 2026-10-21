@@ -185,15 +185,9 @@
   </div>
 
   <div class="item">
-    <h3><code>brightness_step</code> — Brightness step</h3>
-    <p class="meta">Default 10 % · range 1–50 %</p>
-    <p>How much brightness changes for each step of rotation. Turning fast sends several steps in a row.</p>
-  </div>
-
-  <div class="item">
-    <h3><code>kelvin_step</code> — Color temperature step</h3>
-    <p class="meta">Default 250 K · range 50–1000 K</p>
-    <p>How much the white temperature changes for each step while pressing and turning. Higher kelvin is cooler (bluer); lower is warmer (yellower).</p>
+    <h3><code>sensitivity</code> — Sensitivity</h3>
+    <p class="meta">Default 1 · range 0.1–3</p>
+    <p>Each time you turn the knob, it reports a step size on a 0–255 scale, and a bigger turn gives a bigger number: the smallest click reports about 13 (5 %), a big turn about 133 (52 %). The blueprint turns that into a share of the light's full range and multiplies it by this setting. At 1 the light follows the knob exactly; at 0.5 every change is half as big.</p>
   </div>
 
   <div class="item">
@@ -261,7 +255,7 @@
   <h2 id="variables">Variables</h2>
 
   <div class="item">
-    <h3><code>knob</code>, <code>light</code>, <code>step</code>, <code>k_step</code></h3>
+    <h3><code>knob</code>, <code>light</code>, <code>sensitivity</code></h3>
     <p>Copies of the inputs, so templates can use them. <code>!input</code> can't be used inside a template directly.</p>
   </div>
 
@@ -269,6 +263,20 @@
     <h3><code>action</code></h3>
 <pre><code>action: "{{ trigger.payload_json.action }}"</code></pre>
     <p>The action that fired this run, such as <code>brightness_step_up</code>. The actions below use it to choose what to do.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>step_size</code> and <code>fraction</code></h3>
+<pre><code>step_size: "{{ trigger.payload_json.action_step_size | int(25) }}"
+fraction:  "{{ [step_size / 255 * sensitivity | float, 1] | min }}"</code></pre>
+    <p><b><code>step_size</code></b> is the step size the knob reported, e.g. 133. If a message has none, it uses 25 (about 10 %).</p>
+    <p><b><code>fraction</code></b> is how much of the full range to move: step size ÷ 255 × sensitivity, capped at 1 (100 %). Brightness and color temperature both use it.</p>
+  </div>
+
+  <div class="item">
+    <h3><code>transition</code></h3>
+<pre><code>transition: "{{ trigger.payload_json.action_transition_time | float(0) }}"</code></pre>
+    <p>How long the knob asks the light to take to reach the new value, e.g. 0.1 s for one click or 0.3 s for a big turn. It's passed to the light, so changes fade smoothly instead of jumping. It doesn't change how big a step is; only <code>sensitivity</code> does that.</p>
   </div>
 
   <div class="item">
@@ -299,8 +307,8 @@
 
   <div class="item">
     <h3>Turn right / left → <code>light.turn_on</code> with <code>brightness_step_pct</code></h3>
-<pre><code>brightness_step_pct: "{{ step | int }}"       # turn right: +10 %
-brightness_step_pct: "{{ -(step | int) }}"    # turn left:  -10 %</code></pre>
+<pre><code>brightness_step_pct: "{{ (fraction * 100) | round(0) | int }}"        # turn right: +52 %
+brightness_step_pct: "{{ -((fraction * 100) | round(0) | int) }}"     # turn left:  -52 %</code></pre>
     <p>Asks Home Assistant to change the light's brightness relative to where it is now. Home Assistant handles the limits: it won't go above 100 %. Stepping down past the minimum turns the light off, and turning right while the light is off turns it on.</p>
   </div>
 
@@ -309,11 +317,13 @@ brightness_step_pct: "{{ -(step | int) }}"    # turn left:  -10 %</code></pre>
 <pre><code>{% set lo  = state_attr(light, 'min_color_temp_kelvin') | int(2000) %}
 {% set hi  = state_attr(light, 'max_color_temp_kelvin') | int(6500) %}
 {% set cur = state_attr(light, 'color_temp_kelvin') | int((lo + hi) // 2) %}
-{{ [[cur ± k_step, hi] | min, lo] | max }}</code></pre>
+{% set size = ((hi - lo) * fraction) | round(0) | int %}
+{{ [[cur ± size, hi] | min, lo] | max }}</code></pre>
     <p>Home Assistant has no "step the color temperature" command, so the blueprint works out the new value itself:</p>
     <p><b><code>lo</code> / <code>hi</code></b> — the warmest and coolest the light supports. The FUT035Z reports about 2000–6500 K; 2000 and 6500 are fallbacks if the light doesn't say.</p>
     <p><b><code>cur</code></b> — the light's current temperature. If it doesn't report one (for example while off), it starts from the middle of its range.</p>
-    <p><b>Last line</b> — adds or subtracts the step, then keeps the result between <code>lo</code> and <code>hi</code>.</p>
+    <p><b><code>size</code></b> — the same share of the range as brightness, in kelvin. For example, 52 % of 2000–6500 K is about 2300 K.</p>
+    <p><b>Last line</b> — adds or subtracts it, then keeps the result between <code>lo</code> and <code>hi</code>.</p>
   </div>
 </main>
 </body>

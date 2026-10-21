@@ -11,6 +11,10 @@ blueprint:
 
     - Press and rotate right / left: cooler / warmer white.
 
+    Each change follows the step size and transition time the knob reports
+    (a bigger turn sends a bigger step), with the step multiplied by the
+    Sensitivity setting.
+
     The knob should be in **command** mode (press it 3 times quickly, or set
     "Operation mode" to "command" in the Zigbee2MQTT device page).
   domain: automation
@@ -36,16 +40,14 @@ blueprint:
       name: Advanced
       collapsed: true
       input:
-        brightness_step:
-          name: Brightness step
-          default: 10
+        sensitivity:
+          name: Sensitivity
+          description: >
+            Multiplies the step size reported by the knob. 1 = as reported,
+            0.5 = half as much change, 2 = twice as much.
+          default: 1
           selector:
-            number: { min: 1, max: 50, step: 1, unit_of_measurement: "%" }
-        kelvin_step:
-          name: Color temperature step
-          default: 250
-          selector:
-            number: { min: 50, max: 1000, step: 50, unit_of_measurement: K }
+            number: { min: 0.1, max: 3, step: 0.1, mode: slider }
         base_topic:
           name: Zigbee2MQTT base topic
           description: Only change if you changed base_topic in the Zigbee2MQTT config.
@@ -86,9 +88,14 @@ triggers:
 variables:
   knob: !input knob
   light: !input light
-  step: !input brightness_step
-  k_step: !input kelvin_step
+  sensitivity: !input sensitivity
   action: "{{ trigger.payload_json.action }}"
+  # Knob step size on a 0-255 scale (e.g. 133). 25 (~10%) if the knob sends none.
+  step_size: "{{ trigger.payload_json.action_step_size | int(25) }}"
+  # Fraction of the full range to move: 133 / 255 * 1 = 0.52
+  fraction: "{{ [step_size / 255 * sensitivity | float, 1] | min }}"
+  # How long the knob asks the light to take to reach the new value (e.g. 0.1 s).
+  transition: "{{ trigger.payload_json.action_transition_time | float(0) }}"
   # Device name in Home Assistant = friendly name in Zigbee2MQTT.
   knob_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(knob), 'name') }}"
 
@@ -109,7 +116,8 @@ actions:
             target:
               entity_id: "{{ light }}"
             data:
-              brightness_step_pct: "{{ step | int }}"
+              brightness_step_pct: "{{ (fraction * 100) | round(0) | int }}"
+              transition: "{{ transition }}"
 
       - conditions: "{{ action == 'brightness_step_down' }}"
         sequence:
@@ -117,7 +125,8 @@ actions:
             target:
               entity_id: "{{ light }}"
             data:
-              brightness_step_pct: "{{ -(step | int) }}"
+              brightness_step_pct: "{{ -((fraction * 100) | round(0) | int) }}"
+              transition: "{{ transition }}"
 
       - conditions: "{{ action in ['color_temperature_step_up', 'color_temperature_step_down'] }}"
         sequence:
@@ -125,9 +134,11 @@ actions:
             target:
               entity_id: "{{ light }}"
             data:
+              transition: "{{ transition }}"
               color_temp_kelvin: >
                 {% set lo = state_attr(light, 'min_color_temp_kelvin') | int(2000) %}
                 {% set hi = state_attr(light, 'max_color_temp_kelvin') | int(6500) %}
                 {% set cur = state_attr(light, 'color_temp_kelvin') | int((lo + hi) // 2) %}
-                {% set delta = k_step | int if action == 'color_temperature_step_up' else -(k_step | int) %}
+                {% set size = ((hi - lo) * fraction) | round(0) | int %}
+                {% set delta = size if action == 'color_temperature_step_up' else -size %}
                 {{ [[cur + delta, hi] | min, lo] | max }}
