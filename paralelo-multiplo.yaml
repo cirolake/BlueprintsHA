@@ -1,5 +1,5 @@
 blueprint:
-  name: Any On Turns On
+  name: Paralelo Multiplo 1praN
   description: >
     Keeps a main entity in sync with a group of source entities, in both
     directions. Turning the main entity on or off turns all sources on or off.
