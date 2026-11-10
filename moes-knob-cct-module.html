@@ -321,9 +321,9 @@ light_topic: "{{ base_topic ~ '/' ~ device_attr(device_id(light), 'name') ~ '/se
 
   <div class="item">
     <h3>Press and turn → <code>color_temp_step</code></h3>
-<pre><code>{"color_temp_step": -13, "transition": 0.1}    # press + right: cooler
-{"color_temp_step": 13, "transition": 0.1}     # press + left:  warmer</code></pre>
-    <p>Changes the color temperature by <code>step</code> <b>mireds</b>, Zigbee's unit for color temperature. Mireds run the opposite way to kelvin: more mireds means warmer. That's why turning right (cooler) sends a negative number. The FUT035Z+ supports 153–500 mireds, about 6500–2000 K; the light keeps itself inside that range.</p>
+<pre><code>{"color_temp_step": 13, "transition": 0.1}     # press + right: warmer
+{"color_temp_step": -13, "transition": 0.1}    # press + left:  cooler</code></pre>
+    <p>Changes the color temperature by <code>step</code> <b>mireds</b>, Zigbee's unit for color temperature. Mireds run the opposite way to kelvin: more mireds means warmer. Pressing and turning right sends a positive number (warmer); pressing and turning left sends a negative number (cooler). The FUT035Z+ supports 153–500 mireds, about 6500–2000 K; the light keeps itself inside that range.</p>
   </div>
 </main>
 </body>

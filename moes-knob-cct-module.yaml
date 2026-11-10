@@ -9,7 +9,7 @@ blueprint:
 
     - Rotate right / left: brightness up / down.
 
-    - Press and rotate right / left: cooler / warmer white.
+    - Press and rotate right / left: warmer / cooler white.
 
     Each change uses the step size and transition time the knob reports
     (a bigger turn sends a bigger step), with the step multiplied by the
@@ -145,8 +145,7 @@ actions:
               payload: >
                 {"brightness_step": {{ step if action == 'brightness_step_up' else -step }},
                  "transition": {{ transition }}}
-
-      # Rotate right = cooler = fewer mireds.
+      # Press + rotate right = more mireds = warmer.
       - conditions: "{{ action in ['color_temperature_step_up', 'color_temperature_step_down'] }}"
         sequence:
           - action: mqtt.publish
