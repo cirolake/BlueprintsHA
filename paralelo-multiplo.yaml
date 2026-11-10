@@ -57,25 +57,27 @@ actions:
   - choose:
       # Main turned on by the user (all sources off) -> turn all sources on.
       # If a source is already on, the main was turned on by this automation.
-      - conditions: "{{ trigger.id == 'target' and target_on and not any_on }}"
+      - conditions: "{{ trigger.id == 'target' and trigger.to_state.state == 'on' and not any_on }}"
         sequence:
           - action: homeassistant.turn_on
             target:
               entity_id: "{{ sources }}"
       # Main turned off by the user (some source on) -> turn all sources off.
-      - conditions: "{{ trigger.id == 'target' and not target_on and any_on }}"
+      - conditions: "{{ trigger.id == 'target' and trigger.to_state.state == 'off' and any_on }}"
         sequence:
           - action: homeassistant.turn_off
             target:
               entity_id: "{{ sources }}"
       # A source turned on -> turn only the main on.
-      - conditions: "{{ trigger.id == 'source' and any_on and not target_on }}"
+      # Checking the direction avoids a race: when the main turns all sources
+      # off, one source may report off while another still shows on.
+      - conditions: "{{ trigger.id == 'source' and trigger.to_state.state == 'on' and not target_on }}"
         sequence:
           - action: homeassistant.turn_on
             target:
               entity_id: "{{ target }}"
       # The last source turned off -> turn the main off.
-      - conditions: "{{ trigger.id == 'source' and not any_on and target_on }}"
+      - conditions: "{{ trigger.id == 'source' and trigger.to_state.state == 'off' and not any_on and target_on }}"
         sequence:
           - action: homeassistant.turn_off
             target:
